@@ -80,22 +80,22 @@ class FlowFeature:
 
         # 每秒传输的数据包数
         self.flowPktsS = 0
-        # 每毫秒传输的数据包字节数
+        # 每毫秒传输的数据包负载字节数
         self.flowPldBytesMS = 0
 
         # 每秒正向传输的数据包数
         self.fwdPktsS = 0
-        # 每毫秒正向传输的数据包字节数
+        # 每毫秒正向传输的数据包负载字节数
         self.fwdPldBytesMS = 0
 
         # 每秒反向传输的数据包数
         self.bwdPktsS = 0
-        # 每毫秒反向传输的数据包字节数
+        # 每毫秒反向传输的数据包负载字节数
         self.bwdPldBytesMS = 0
 
         # 反向/正向传输的数据包数比例
         self.pktsRatio = 0
-        # 反向/正向传输的字节数比例
+        # 反向/正向传输的数据包负载字节数比例
         self.bytesRatio = 0
 
         """间隔时间相关特征"""
@@ -204,15 +204,20 @@ class FlowFeature:
         # 正向每批量的平均字节数
         self.fwdAvgBytesPerBulk = 0
         # 正向平均bulk速率
-        self.fwdAvgBulkRate = 0
+        self.fwdAvgBulkS = 0
         # 反向每批量的平均数据包数
         self.bwdAvgPktsPerBulk = 0
         # 反向每批量的平均字节数
         self.bwdAvgBytesPerBulk = 0
         # 反向平均bulk速率
-        self.bwdAvgBulkRate = 0
+        self.bwdAvgBulkS = 0
 
     def calRate(self):
+        """
+        Description: 计算速率相关特征
+        Input: None
+        Output: None
+        """
         if self.flowDurationMS > 0:
             self.flowPktsS = self.flowPktNum / (self.flowDurationMS / 1000)
             self.flowPldBytesMS = self.flowPldByteSum / self.flowDurationMS
@@ -227,11 +232,123 @@ class FlowFeature:
             self.bytesRatio = self.bwdPldByteSum / self.fwdPldByteSum
 
     def calSubFlow(self, subFlowcnt):
+        """
+        Description: 计算子流相关特征
+        Input: None
+        Output: None
+        """
         self.subFlowFwdPkts = self.fwdPktNum / subFlowcnt
         self.subFlowFwdPldBytes = self.fwdPldByteSum / subFlowcnt
         self.subFlowBwdPkts = self.bwdPktNum / subFlowcnt
         self.subFlowBwdPldBytes = self.bwdPldByteSum / subFlowcnt
 
-    def listAllMember(self):
+    def returnFeature(self):
+        """
+        Description: 返回会话流的统计特征
+        Input: None
+        Output: 会话流的统计特征
+        """
+        featureValue = []
+        # 遍历类中的所有特征
         for name, value in vars(self).items():
-            print("%s = %s" % (name, value))
+            # 保存特征值
+            featureValue.append(value)
+
+        return featureValue
+
+
+def getCsvColName():
+    """返回所有特征名"""
+    # CSV文件列名
+    csvColumnName = [
+        "Flow ID",  # 1
+        "Src IP",
+        "Src Port",
+        "Dst IP",
+        "Dst Port",
+        "Protocol",
+        "Flow Pkt Num",
+        "Flow Pld Byte Sum",
+        "Flow Pld Byte Max",
+        "Flow Pld Byte Min",
+        "Flow Pld Byte Mean",
+        "Flow Pld Byte Std",
+        "Fwd Pkt Num",
+        "Fwd Pld Byte Sum",
+        "Fwd Pld Byte Max",
+        "Fwd Pld Byte Min",
+        "Fwd Pld Byte Mean",
+        "Fwd Pld Byte Std",
+        "Bwd Pkt Num",
+        "Bwd Pld Byte Sum",
+        "Bwd Pld Byte Max",
+        "Bwd Pld Byte Min",
+        "Bwd Pld Byte Mean",
+        "Bwd Pld Byte Std",
+        "Fwd Head Byte Max",
+        "Fwd Head Byte Min",
+        "Fwd Head Byte Mean",
+        "Fwd Head Byte Std",
+        "Bwd Head Byte Max",
+        "Bwd Head Byte Min",
+        "Bwd Head Byte Mean",
+        "Bwd Head Byte Std",
+        "Flow Duration(ms)",
+        "Flow Pkts/s",
+        "Flow Pld Bytes/ms",
+        "Fwd Pkts/s",
+        "Fwd Pld Bytes/ms",
+        "Bwd Pkts/s",
+        "Bwd Pld Bytes/ms",
+        "Pkts Ratio",
+        "Bytes Ratio",
+        "Flow IAT Max",
+        "Flow IAT Min",
+        "Flow IAT Mean",
+        "Flow IAT Std",
+        "Fwd IAT Max",
+        "Fwd IAT Min",
+        "Fwd IAT Mean",
+        "Fwd IAT Std",
+        "Bwd IAT Max",
+        "Bwd IAT Min",
+        "Bwd IAT Mean",
+        "Bwd IAT Std",
+        "FIN Count",
+        "SYN Count",
+        "RST Count",
+        "PSH Count",
+        "ACK Count",
+        "URG Count",
+        "ECE Count",
+        "CWR Count",
+        "Fwd PSH Count",
+        "Bwd PSH Count",
+        "Fwd URG Count",
+        "Bwd URG Count",
+        "Fwd Init Win Bytes",
+        "Bwd Init Win Bytes",
+        "Fwd Pkts With Pld",
+        "Bwd Pkts With Pld",
+        "Sub Flow Fwd Pkts",
+        "Sub Flow Fwd Bytes",
+        "Sub Flow Bwd Pkts",
+        "Sub Flow Bwd Bytes",
+        "Flow Act Sum",
+        "Flow Act Max",
+        "Flow Act Min",
+        "Flow Act Mean",
+        "Flow Act Std",
+        "Flow Idle Sum",
+        "Flow Idle Max",
+        "Flow Idle Min",
+        "Flow Idle Mean",
+        "Flow Idle Std",
+        "Fwd Avg Pkts/Bulk",
+        "Fwd Avg Bytes/Bulk",
+        "Fwd Avg Bulk/s",
+        "Bwd Avg Pkts/Bulk",
+        "Bwd Avg Bytes/Bulk",
+        "Bwd Avg Bulk/s",
+    ]
+    return csvColumnName
