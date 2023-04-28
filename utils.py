@@ -1,39 +1,6 @@
 import numpy as np
 
 
-def get_ip_port(pcap_file):
-    """
-    Description: 根据文件名提取IP地址和端口地址
-    Input: PCAP文件名
-    Output: IP地址和端口地址
-    """
-    for i in range(len(pcap_file)):
-        if pcap_file[i : i + 5] == ".TCP_":
-            break
-    j = i + 5
-    i = j
-    while pcap_file[j] != "_":
-        j += 1
-    dst_ip = pcap_file[i:j].replace("-", ".")  # 目的IP
-    j += 1
-    i = j
-    while pcap_file[j] != "_":
-        j += 1
-    dst_port = pcap_file[i:j]  # 目的端口
-    j += 1
-    i = j
-    while pcap_file[j] != "_":
-        j += 1
-    src_ip = pcap_file[i:j].replace("-", ".")  # 源IP
-    j += 1
-    i = j
-    while pcap_file[j] != ".":
-        j += 1
-    src_port = pcap_file[i:j]  # 源端口
-
-    return (src_ip, src_port, dst_ip, dst_port)
-
-
 class IdGenerator:
     """为每个数据包生成唯一的ID"""
 
@@ -78,9 +45,6 @@ class SummaryStatistics:
 
     def getStd(self):
         return np.std(self.value)
-
-    def getVar(self):
-        return np.var(self.value)
 
 
 class BulkStatistics:
