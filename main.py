@@ -17,13 +17,16 @@ from FlowGenerator import FlowGenerator
 file_path = "F:\\2.pcap.TCP_1-226-51-14_80_192-168-10-12_55900.pcap"
 flowTimeout = 120000000
 activityTimeout = 5000000
+subFlowTimeout = 1000000
+bulkTimeout = 1000000
 packetReader = PacketReader(file_path)
-flowGenerator = FlowGenerator(flowTimeout, activityTimeout)
+flowGenerator = FlowGenerator(flowTimeout, activityTimeout, subFlowTimeout, bulkTimeout)
 
 basicPacket = packetReader.nextPacket()
 while basicPacket != None:
     flowGenerator.addPacket(basicPacket)
     basicPacket = packetReader.nextPacket()
+flowGenerator.clearFlow()
 
-# flowGenerator.dumpFeature()
-flowGenerator.display()
+flowGenerator.dumpFeatureToCSV()
+# flowGenerator.display()
