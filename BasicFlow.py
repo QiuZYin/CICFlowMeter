@@ -11,8 +11,8 @@ class BasicFlow:
     def __init__(
         self,
         packet: BasicPacketInfo,
-        subFlowTimeout=1000000,
         activityTimeout=5000000,
+        subFlowTimeout=1000000,
         bulkTimeout=1000000,
         flowSrc=None,
         flowDst=None,
@@ -27,10 +27,10 @@ class BasicFlow:
         """流基本信息"""
         # 源IP地址
         self.srcIP = None
-        # 目的IP地址
-        self.dstIP = None
         # 源端口
         self.srcPort = 0
+        # 目的IP地址
+        self.dstIP = None
         # 目的端口
         self.dstPort = 0
         # 传输层协议(TCP:6 UDP:17)
@@ -85,12 +85,6 @@ class BasicFlow:
         # 数据包负载长度列表
         self.flowPldStats = SummaryStatistics()
 
-        """数据包负载信息"""
-        # 正向数据包列表
-        self.fwdPayload = []
-        # 反向数据包列表
-        self.bwdPayload = []
-
         """TCP标志信息"""
         # 带有FIN的数据包数量
         self.FINcnt = 0
@@ -138,11 +132,18 @@ class BasicFlow:
         # 具有有效负载的反向数据包个数
         self.bwdPktsWithPayload = 0
 
-        """会话流统计特征"""
+        """会话流统计特征类"""
         # 基于流的统计特征
         self.features = FlowFeature()
 
+        """会话流传输层负载信息"""
+        # 正向数据包负载信息
+        self.fwdPayloads = []
+        # 反向数据包负载信息
+        self.bwdPayloads = []
+
         """根据参数以及第一个数据包 初始化部分信息"""
+        # 优先根据参数设置
         if flowSrc != None and flowSrcPort != None:
             self.srcIP = flowSrc
             self.srcPort = flowSrcPort
@@ -161,6 +162,7 @@ class BasicFlow:
         self.flowId = packet.getFwdFlowId()
         self.protocol = packet.getProtocol()
 
+        # 获取数据包时间戳
         currentTS = packet.getTimeStamp()
         # 设置会话流开始时间等信息
         self.flowStartTime = currentTS
@@ -168,10 +170,12 @@ class BasicFlow:
         self.startActiveTime = currentTS
         self.endActiveTime = currentTS
 
+        # 设置阈值
         self.subFlowTimeout = subFlowTimeout
         self.activityTimeout = activityTimeout
         self.bulkTimeout = bulkTimeout
 
+        # 向会话流中添加数据包
         self.addPacket(packet)
 
     def addPacket(self, packet: BasicPacketInfo):
@@ -181,64 +185,101 @@ class BasicFlow:
         Output: None
         """
 
+        # 获取数据包时间戳
         currentTS = packet.getTimeStamp()
+        # 获取负载长度
         pktPLBs = packet.getPayloadBytes()
 
+        # 如果是正向流
         if self.srcIP == packet.getSrcIP():
 
+            # 更新正向数据包头长度
             self.fwdHeadStats.addValue(packet.getHeadBytes())
+            # 更新正向数据包负载长度
             self.fwdPktPldStats.addValue(pktPLBs)
-            self.fwdPayload.append(packet.getPayload())
+            # 更新正向TCP标志
             self.fwdPSHcnt += packet.hasFlagPSH()
             self.fwdURGcnt += packet.hasFlagURG()
-            self.fwdPktsWithPayload += pktPLBs > 0
 
-            if self.fwdInitWinBytes == 0:
+            # 如果负载不为空
+            if pktPLBs > 0:
+                # 更新有效负载的正向数据包个数
+                self.fwdPktsWithPayload += 1
+                # 更新正向数据包负载
+                self.fwdPayloads.append(packet.getPayload())
+
+            # 如果是第一个正向数据包
+            if self.fwdPktPldStats.getN() == 1:
+                # 设置正向的初始TCP窗口大小
                 self.fwdInitWinBytes = packet.getTCPWindow()
-
-            if self.fwdPktPldStats.getN() > 1:
+            else:  # 否则
+                # 更新正向数据包间隔时间
                 self.forwardIAT.addValue((currentTS - self.fwdLastTime) / 1000)
+
+            # 更新正向数据包当前时间
             self.fwdLastTime = currentTS
 
+            # 更新Bulk相关信息
             self.updateFlowBulk(
                 packet,
                 self.fwdBulkStats,
                 self.bwdBulkStats.lastTS,
             )
-
+        # 如果是反向流
         elif self.srcIP == packet.getDstIP():
 
+            # 更新反向数据包头长度
             self.bwdHeadStats.addValue(packet.getHeadBytes())
+            # 更新反向数据包负载长度
             self.bwdPktPldStats.addValue(pktPLBs)
-            self.bwdPayload.append(packet.getPayload())
+            # 更新反向TCP标志
             self.bwdPSHcnt += packet.hasFlagPSH()
             self.bwdURGcnt += packet.hasFlagURG()
-            self.bwdPktsWithPayload += pktPLBs > 0
 
-            if self.bwdInitWinBytes == 0:
+            # 如果负载不为空
+            if pktPLBs > 0:
+                # 更新有效负载的反向数据包个数
+                self.bwdPktsWithPayload += 1
+                # 更新反向数据包负载
+                self.bwdPayloads.append(packet.getPayload())
+
+            # 如果是第一个反向数据包
+            if self.bwdPktPldStats.getN() == 1:
+                # 设置反向的初始TCP窗口大小
                 self.bwdInitWinBytes = packet.getTCPWindow()
-
-            if self.bwdPktPldStats.getN() > 1:
+            else:  # 否则
+                # 更新反向数据包间隔时间
                 self.backwardIAT.addValue((currentTS - self.bwdLastTime) / 1000)
+
+            # 更新反向数据包当前时间
             self.bwdLastTime = currentTS
 
+            # 更新Bulk相关信息
             self.updateFlowBulk(
                 packet,
                 self.bwdBulkStats,
                 self.fwdBulkStats.lastTS,
             )
-
+        # 否则报错
         else:
             print("ERROR")
 
+        # 更新会话流数据包负载长度
         self.flowPldStats.addValue(pktPLBs)
 
+        # 如果不是第一个数据包
         if self.flowPldStats.getN() > 1:
+            # 更新会话流数据包间隔时间
             self.flowIAT.addValue((currentTS - self.flowLastTime) / 1000)
+
+        # 更新当前时间
         self.flowLastTime = currentTS
 
+        # 更新标志信息
         self.checkFlags(packet)
+        # 更新子流信息
         self.updateSubflows(packet)
+        # 更新流活动空闲信息
         self.updateActIdleTime(packet)
 
     def checkFlags(self, packet: BasicPacketInfo):
@@ -262,12 +303,15 @@ class BasicFlow:
         Input: BasicPacketInfo
         Output: None
         """
+        # 当前时间戳
         currentTS = packet.getTimeStamp()
-        # 空闲时间
+        # 和上一个数据包的间隔时间
         idleTime = currentTS - self.subFlowLastTime
         # 如果超过阈值
         if idleTime > self.subFlowTimeout:
+            # 子流数量加一
             self.subFlowcnt += 1
+        # 更新子流时间戳
         self.subFlowLastTime = currentTS
 
     def updateActIdleTime(self, packet: BasicPacketInfo):
@@ -276,68 +320,113 @@ class BasicFlow:
         Input: BasicPacketInfo
         Output: None
         """
+        # 当前时间戳
         currentTS = packet.getTimeStamp()
-        # 空闲时间
+        # 和上一个数据包的间隔时间(即空闲时间)
         idleTime = currentTS - self.endActiveTime
         # 如果超过阈值
         if idleTime > self.activityTimeout:
+
+            # 更新流空闲时间
             self.flowIdle.addValue(idleTime / 1000)
 
+            # 计算流活动时间
             activeTime = self.endActiveTime - self.startActiveTime
-            # 如果活动时间大于0,则添加
+            # 如果活动时间大于0(即上一个活动区间的数据包个数大于1)
             if activeTime > 0:
+                # 更新流活动时间
                 self.flowActive.addValue(activeTime / 1000)
 
             # 更新流活动开始时间
             self.startActiveTime = currentTS
 
+        # 更新流活动结束时间
         self.endActiveTime = currentTS
 
     def updateFlowBulk(
         self, packet: BasicPacketInfo, bulkStats: BulkStatistics, lastTSinOther
     ):
-
-        # TODO 添加注释
+        """
+        Description: 更新Bulk相关信息
+        Input: BasicPacketInfo, BulkStatistics, lastTSinOther
+        Output: None
+        """
+        # 数据包负载长度
         payloadBytes = packet.getPayloadBytes()
+        # 当前时间戳
         currentTS = packet.getTimeStamp()
 
+        # 若负载为空,则返回
         if payloadBytes == 0:
             return
 
+        # 若   另一个流向的最后一个负载不为空数据包的时间戳 大于 当前流向bulk的开始时间戳
+        # 或者 当前bulk的开始时间戳 等于 零
+        # 或者 当前时间戳 - 当前bulk的最后一个时间戳 大于 bulk阈值
         if (
             lastTSinOther > bulkStats.startTS
             or bulkStats.startTS == 0
             or currentTS - bulkStats.lastTS > self.bulkTimeout
         ):
+            # 数据包缓存数量 设为 1
             bulkStats.pktsCache = 1
+            # 缓存字节数 设为 负载字节数
             bulkStats.bytesCache = payloadBytes
+            # 设置 Bulk数据包开始时间戳
             bulkStats.startTS = currentTS
-        else:
+        else:  # 否则
+            # 更新数据包缓存数量
             bulkStats.pktsCache += 1
+            # 更新缓存字节数
             bulkStats.bytesCache += payloadBytes
+
+            # 若数据包缓存数量 等于 4
             if bulkStats.pktsCache == 4:
+                # 更新 Bulk数量
                 bulkStats.cnts += 1
-                bulkStats.pkts += bulkStats.pktsCache
+                # 更新 Bulk数据包数量
+                bulkStats.pkts += 4
+                # 更新 Bulk字节数
                 bulkStats.bytes += bulkStats.bytesCache
+                # 更新 Bulk持续时间
                 bulkStats.duration += currentTS - bulkStats.startTS
+            # 若数据包缓存数量 大于 4
             elif bulkStats.pktsCache > 4:
+                # 更新 Bulk数据包数量
                 bulkStats.pkts += 1
+                # 更新 Bulk字节数
                 bulkStats.bytes += payloadBytes
+                # 更新 Bulk持续时间
                 bulkStats.duration += currentTS - bulkStats.lastTS
 
+        # 更新Bulk结束时间
         bulkStats.lastTS = currentTS
+
+    def endSession(self):
+        """
+        Description: 结束会话,更新流活动时间
+        Input: None
+        Output: None
+        """
+        # 计算活动时间
+        activeTime = self.endActiveTime - self.startActiveTime
+        # 如果活动时间大于0
+        if activeTime > 0:
+            # 更新流活动时间
+            self.flowActive.addValue(activeTime / 1000)
 
     def generateFlowFeatures(self):
 
         """流基本信息"""
         self.features.flowId = self.flowId
         self.features.srcIP = self.srcIP
-        self.features.dstIP = self.dstIP
         self.features.srcPort = self.srcPort
+        self.features.dstIP = self.dstIP
         self.features.dstPort = self.dstPort
         self.features.protocol = self.protocol
 
         """数据包个数,负载字节数,包头字节数相关特征"""
+        # 会话流负载长度信息
         self.features.flowPktNum = self.flowPldStats.getN()
         self.features.flowPldByteSum = self.flowPldStats.getSum()
         self.features.flowPldByteMax = self.flowPldStats.getMax()
@@ -345,6 +434,7 @@ class BasicFlow:
         self.features.flowPldByteMean = self.flowPldStats.getMean()
         self.features.flowPldByteStd = self.flowPldStats.getStd()
 
+        # 正向流负载长度信息
         if self.fwdPktPldStats.getN() > 0:
             self.features.fwdPktNum = self.fwdPktPldStats.getN()
 
@@ -359,6 +449,7 @@ class BasicFlow:
             self.features.fwdHeadByteMean = self.fwdHeadStats.getMean()
             self.features.fwdHeadByteStd = self.fwdHeadStats.getStd()
 
+        # 反向流负载长度信息
         if self.bwdPktPldStats.getN() > 0:
             self.features.bwdPktNum = self.bwdPktPldStats.getN()
 
@@ -374,22 +465,27 @@ class BasicFlow:
             self.features.bwdHeadByteStd = self.bwdHeadStats.getStd()
 
         """流速相关特征"""
+        # 流持续时间
         self.features.flowDurationMS = (self.flowLastTime - self.flowStartTime) / 1000
+        # 速率相关特征
         self.features.calRate()
 
         """间隔时间相关特征"""
+        # 会话流间隔时间
         if self.flowIAT.getN() > 0:
             self.features.flowIatMax = self.flowIAT.getMax()
             self.features.flowIatMin = self.flowIAT.getMin()
             self.features.flowIatMean = self.flowIAT.getMean()
             self.features.flowIatStd = self.flowIAT.getStd()
 
+        # 正向流间隔时间
         if self.forwardIAT.getN() > 0:
             self.features.fwdIatMax = self.forwardIAT.getMax()
             self.features.fwdIatMin = self.forwardIAT.getMin()
             self.features.fwdIatMean = self.forwardIAT.getMean()
             self.features.fwdIatStd = self.forwardIAT.getStd()
 
+        # 反向流间隔时间
         if self.backwardIAT.getN() > 0:
             self.features.bwdIatMax = self.backwardIAT.getMax()
             self.features.bwdIatMin = self.backwardIAT.getMin()
@@ -420,23 +516,27 @@ class BasicFlow:
         self.features.bwdPktsWithPayload = self.bwdPktsWithPayload
 
         """子流相关特征"""
-        if self.subFlowcnt > 0:
-            self.features.calSubFlow(self.subFlowcnt)
+        self.features.calSubFlow(self.subFlowcnt)
 
         """流活动-空闲相关特征"""
-        self.features.flowActSum = self.flowActive.getSum()
-        self.features.flowActMax = self.flowActive.getMax()
-        self.features.flowActMin = self.flowActive.getMin()
-        self.features.flowActMean = self.flowActive.getMean()
-        self.features.flowActStd = self.flowActive.getStd()
+        # 会话流活动时间信息
+        if self.flowActive.getN() > 0:
+            self.features.flowActSum = self.flowActive.getSum()
+            self.features.flowActMax = self.flowActive.getMax()
+            self.features.flowActMin = self.flowActive.getMin()
+            self.features.flowActMean = self.flowActive.getMean()
+            self.features.flowActStd = self.flowActive.getStd()
 
-        self.features.flowIdleSum = self.flowIdle.getSum()
-        self.features.flowIdleMax = self.flowIdle.getMax()
-        self.features.flowIdleMin = self.flowIdle.getMin()
-        self.features.flowIdleMean = self.flowIdle.getMean()
-        self.features.flowIdleStd = self.flowIdle.getStd()
+        # 会话流空闲时间信息
+        if self.flowIdle.getN() > 0:
+            self.features.flowIdleSum = self.flowIdle.getSum()
+            self.features.flowIdleMax = self.flowIdle.getMax()
+            self.features.flowIdleMin = self.flowIdle.getMin()
+            self.features.flowIdleMean = self.flowIdle.getMean()
+            self.features.flowIdleStd = self.flowIdle.getStd()
 
         """Bulk相关特征"""
+        # 正向Bulk相关信息
         if self.fwdBulkStats.cnts > 0:
             self.features.fwdAvgPktsPerBulk = (
                 self.fwdBulkStats.pkts / self.fwdBulkStats.cnts
@@ -445,9 +545,11 @@ class BasicFlow:
                 self.fwdBulkStats.bytes / self.fwdBulkStats.cnts
             )
         if self.fwdBulkStats.duration > 0:
-            self.features.fwdAvgBulkRate = (
-                self.fwdBulkStats.cnts / self.fwdBulkStats.duration
+            self.features.fwdAvgBulkS = self.fwdBulkStats.cnts / (
+                self.fwdBulkStats.duration / 1000000
             )
+
+        # 反向Bulk相关信息
         if self.bwdBulkStats.cnts > 0:
             self.features.bwdAvgPktsPerBulk = (
                 self.bwdBulkStats.pkts / self.bwdBulkStats.cnts
@@ -456,9 +558,20 @@ class BasicFlow:
                 self.bwdBulkStats.bytes / self.bwdBulkStats.cnts
             )
         if self.bwdBulkStats.duration > 0:
-            self.features.bwdAvgBulkRate = (
-                self.bwdBulkStats.cnts / self.bwdBulkStats.duration
+            self.features.bwdAvgBulkS = self.bwdBulkStats.cnts / (
+                self.bwdBulkStats.duration / 1000000
             )
+
+        # 通过FlowFeature类返回特征
+        return self.features.returnFeature()
+
+    def getFwdPayloads(self):
+        """返回正向数据包负载信息"""
+        return self.fwdPayloads
+
+    def getBwdPayloads(self):
+        """返回反向数据包负载信息"""
+        return self.bwdPayloads
 
     def getSrcIP(self):
         return self.srcIP
@@ -466,19 +579,17 @@ class BasicFlow:
     def getFlowLastTime(self):
         return self.flowLastTime
 
+    def getPktCnt(self):
+        return self.flowPldStats.getN()
+
     def setFwdFINFlags(self):
         self.fwdFINcnt += 1
-        return self.fwdFINcnt
 
     def setBwdFINFlags(self):
         self.bwdFINcnt += 1
-        return self.bwdFINcnt
 
     def getFwdFINFlags(self):
         return self.fwdFINcnt
 
     def getBwdFINFlags(self):
         return self.bwdFINcnt
-
-    def display(self):
-        self.features.listAllMember()
